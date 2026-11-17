@@ -27,6 +27,8 @@ internal static class WmiHelper
         return obj[property];
     }
 
+    public static void ClearCache() => Cache.Clear();
+
     private static readonly Dictionary<(string, string), ManagementBaseObject?> Cache = new();
 }
 

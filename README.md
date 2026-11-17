@@ -1,6 +1,12 @@
 # GameRoot
 
-A Windows console tool that scans PC settings and reports each one as **On** or **Off**.
+A Windows app that scans PC settings and reports each one as **On** or **Off**. It has three tabs:
+
+- **Security** (opens on launch): the settings report below.
+- **Services**: every running Windows service.
+- **Drivers**: every loaded driver.
+
+Click a column header to sort, and Ctrl+C copies selected rows.
 Version 1 is read-only: it changes nothing.
 
 ## What it checks
@@ -27,10 +33,10 @@ Requires the .NET 8 SDK.
 dotnet publish src/GameRoot/GameRoot.csproj -c Release -r win-x64 -o publish
 ```
 
-This produces a single self-contained `publish/GameRoot.exe`. Run with `--no-pause` to skip the
-"Press any key" prompt. Every push also builds the exe in GitHub Actions (download it from the run's artifacts).
+This produces a single self-contained `publish/GameRoot.exe` (build it on Windows; the Windows Forms
+SDK is not available in Linux builds of the .NET SDK). Every push also builds the exe in GitHub Actions (download it from the run's artifacts).
 
 ## Adding a check
 
-Implement `ICheck` in `src/GameRoot/Checks/` and add it to a section in `Program.cs`. Each section is
+Implement `ICheck` in `src/GameRoot/Checks/` and add it to a section in `SecurityReport.cs`. Each section is
 followed by a separator line.

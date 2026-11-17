@@ -14,8 +14,6 @@ jobs:
           dotnet-version: 8.0.x
       - name: Publish single-file exe
         run: dotnet publish src/GameRoot/GameRoot.csproj -c Release -r win-x64 -o publish
-      - name: Run scan
-        run: ./publish/GameRoot.exe --no-pause
       - uses: actions/upload-artifact@v4
         with:
           name: GameRoot-win-x64
