@@ -9,7 +9,8 @@ A Windows app that scans PC settings and reports each one as **On** or **Off**. 
 Click a column header to sort, and Ctrl+C copies selected rows. **Export report...** in the bottom bar
 saves all three tabs to a text file.
 
-GameRoot runs as administrator (it prompts via UAC on launch). The scan is read-only, with one exception:
+GameRoot runs as administrator (it prompts via UAC on launch). After a warning prompt, a scanning window with the
+GameRoot logo and a progress bar runs the scan; the main window opens with the results when it finishes. The scan is read-only, with one exception:
 the **Windows Settings** (Game Mode, GPU scheduling, Fast Boot) have a slider at the start of their row to
 turn them on or off. The Windows Security protections and BIOS items are never changed by the app; instead each Windows Security
 heading has one **Open** button (each heading is a single page) that jumps straight to it in Windows, and

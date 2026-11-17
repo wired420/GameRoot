@@ -14,6 +14,11 @@ internal sealed class MainForm : Form
     private (List<ListRow> Rows, string? Error) _driverRows = ([], null);
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 
+    private readonly ScanData? _initial;
+
+    /// <summary>Opens with results already scanned by the splash screen.</summary>
+    public MainForm(ScanData initial) : this() => _initial = initial;
+
     public MainForm()
     {
         Text = "GameRoot - system check (read-only, nothing is changed)";
@@ -56,7 +61,11 @@ internal sealed class MainForm : Form
         _board.ToggleRequested += OnToggleRequested;
         _board.OpenRequested += OnOpenRequested;
 
-        Shown += async (_, _) => await LoadAllAsync();
+        Shown += async (_, _) =>
+        {
+            if (_initial is not null) ShowData(_initial);
+            else await LoadAllAsync();
+        };
     }
 
     /// <summary>Opens the Windows page or console for a read-only row. GameRoot changes nothing itself.</summary>
@@ -104,19 +113,20 @@ internal sealed class MainForm : Form
         UseWaitCursor = true;
         _status.Text = "Scanning...";
 
-        var report = Task.Run(SecurityReport.Scan);
-        var services = Task.Run(() => Safe(SystemLists.RunningServices));
-        var drivers = Task.Run(() => Safe(SystemLists.LoadedDrivers));
+        var data = await Task.Run(() => ScanService.RunAll());
+        ShowData(data);
+        UseWaitCursor = false;
+    }
 
-        _securityLines = await report;
-        _serviceRows = await services;
-        _driverRows = await drivers;
+    private void ShowData(ScanData data)
+    {
+        _securityLines = data.Security;
+        _serviceRows = data.Services;
+        _driverRows = data.Drivers;
         _board.SetLines(_securityLines);
         FitToBoard();
         Fill(_services, _serviceRows);
         Fill(_drivers, _driverRows);
-
-        UseWaitCursor = false;
         UpdateStatus();
     }
 
@@ -175,11 +185,6 @@ internal sealed class MainForm : Form
         };
     }
 
-    private static (List<ListRow> Rows, string? Error) Safe(Func<List<ListRow>> query)
-    {
-        try { return (query(), null); }
-        catch (Exception ex) { return ([], ex.Message); }
-    }
 
     private static void Fill(ListView list, (List<ListRow> Rows, string? Error) result)
     {

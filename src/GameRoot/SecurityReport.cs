@@ -56,12 +56,18 @@ internal static class SecurityReport
     };
 
     /// <summary>Runs every check and returns the report as structured lines for the status board.</summary>
-    public static List<ReportLine> Scan()
+    public static List<ReportLine> Scan() => Scan(null);
+
+    /// <summary>Runs every check, reporting progress from 0 to 1 as each one finishes.</summary>
+    public static List<ReportLine> Scan(IProgress<ScanProgress>? progress)
     {
         WmiHelper.ClearCache();
         var lines = new List<ReportLine>();
+        var sections = Sections();
+        int total = Math.Max(1, sections.Sum(s => s.Groups.Sum(g => g.Checks.Length)));
+        int done = 0;
 
-        foreach (var section in Sections())
+        foreach (var section in sections)
         {
             if (section.Title is not null)
                 lines.Add(new ReportLine(LineKind.SectionTitle, 0, section.Title));
@@ -75,7 +81,9 @@ internal static class SecurityReport
 
                 foreach (var check in group.Checks)
                 {
+                    progress?.Report(new ScanProgress((double)done / total, $"Checking {check.Name}..."));
                     string value = Run(check).Value;
+                    done++;
                     // A slider appears only when the value is a plain On/Off we can actually set.
                     var toggle = check as IToggle;
                     bool settable = toggle is not null && value is "On" or "Off";

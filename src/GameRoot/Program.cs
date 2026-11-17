@@ -20,6 +20,23 @@ internal static class Program
         if (answer != DialogResult.Yes)
             return;
 
-        Application.Run(new MainForm());
+        // Scan behind a splash window with a progress bar, then open the main window with the results.
+        ScanData? data;
+        string? error;
+        using (var splash = new SplashForm())
+        {
+            Application.Run(splash);
+            data = splash.Result;
+            error = splash.Error;
+        }
+
+        if (data is null)
+        {
+            MessageBox.Show($"The scan could not finish: {error ?? "unknown error"}", "GameRoot",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        Application.Run(new MainForm(data));
     }
 }
