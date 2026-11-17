@@ -8,6 +8,9 @@ internal sealed class MainForm : Form
     private readonly StatusBoard _board = new() { Dock = DockStyle.Fill };
     private readonly ListView _services = NewList(SystemLists.ServiceColumns);
     private readonly ListView _drivers = NewList(SystemLists.DriverColumns);
+    private IReadOnlyList<ReportLine> _securityLines = [];
+    private (List<ListRow> Rows, string? Error) _serviceRows = ([], null);
+    private (List<ListRow> Rows, string? Error) _driverRows = ([], null);
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 
     public MainForm()
@@ -38,7 +41,9 @@ internal sealed class MainForm : Form
         refresh.Click += async (_, _) => await LoadAllAsync();
         var statusStrip = new StatusStrip { Renderer = new Theme.Renderer(), SizingGrip = false };
         _status.ForeColor = Theme.Text;
-        statusStrip.Items.AddRange(new ToolStripItem[] { _status, refresh });
+        var export = new ToolStripButton("Export report...") { Alignment = ToolStripItemAlignment.Right };
+        export.Click += (_, _) => ExportReport();
+        statusStrip.Items.AddRange(new ToolStripItem[] { _status, refresh, export });
         if (_board.ContextMenuStrip is { } menu)
             menu.Renderer = new Theme.Renderer();
 
@@ -59,10 +64,13 @@ internal sealed class MainForm : Form
         var services = Task.Run(() => Safe(SystemLists.RunningServices));
         var drivers = Task.Run(() => Safe(SystemLists.LoadedDrivers));
 
-        _board.SetLines(await report);
+        _securityLines = await report;
+        _serviceRows = await services;
+        _driverRows = await drivers;
+        _board.SetLines(_securityLines);
         FitToBoard();
-        Fill(_services, await services);
-        Fill(_drivers, await drivers);
+        Fill(_services, _serviceRows);
+        Fill(_drivers, _driverRows);
 
         UseWaitCursor = false;
         UpdateStatus();
@@ -81,6 +89,36 @@ internal sealed class MainForm : Form
         bounds.X = Math.Max(area.Left, Math.Min(bounds.X, area.Right - bounds.Width));
         bounds.Y = Math.Max(area.Top, Math.Min(bounds.Y, area.Bottom - bounds.Height));
         Bounds = bounds;
+    }
+
+    /// <summary>Saves Security, Services and Drivers to one plain-text file.</summary>
+    private void ExportReport()
+    {
+        if (_securityLines.Count == 0)
+        {
+            _status.Text = "Wait for the scan to finish, then export.";
+            return;
+        }
+
+        using var dialog = new SaveFileDialog
+        {
+            Title = "Export GameRoot report",
+            Filter = "Text file (*.txt)|*.txt",
+            FileName = $"GameRoot-report-{Environment.MachineName}-{DateTime.Now:yyyy-MM-dd-HHmm}.txt",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        try
+        {
+            File.WriteAllText(dialog.FileName, ReportExporter.Build(_securityLines, _serviceRows, _driverRows), new System.Text.UTF8Encoding(true));
+            _status.Text = $"Report saved to {dialog.FileName}";
+        }
+        catch (Exception ex)
+        {
+            _status.Text = $"Could not save the report: {ex.Message}";
+        }
     }
 
     private void UpdateStatus()
