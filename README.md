@@ -3,27 +3,21 @@
 A Windows console tool that scans PC settings and reports each one as **On** or **Off**.
 Version 1 is read-only: it changes nothing.
 
-## Output
+## What it checks
 
-```
-GameRoot - system check (read-only, nothing is changed)
---------------------------------------------------
-TPM                                  : On
-Secure Boot                          : On
---------------------------------------------------
-Game Mode                            : On
-Hardware-accelerated GPU scheduling  : Off
-Fast Boot                            : On
---------------------------------------------------
-```
+1. **TPM** and **Secure Boot**, each a plain On or Off.
+2. **Game Mode**, **Hardware-accelerated GPU scheduling** and **Fast Boot**.
+3. **Windows Security**, matching the pages of the Windows Security app (minus health, family options and history):
+   - Virus & threat protection: Defender Antivirus, real-time, cloud-delivered, sample submission, Tamper Protection, controlled folder access
+   - Account protection: Dynamic lock
+   - Firewall & network protection: domain, private and public networks
+   - App & browser control: Smart App Control, Check apps and files, SmartScreen for Edge and Store apps, phishing protection, PUA blocking
+   - Exploit protection (system settings): CFG, DEP, force randomization, bottom-up ASLR, high-entropy ASLR, SEHOP, heap integrity
+   - Device security: core isolation (VBS), memory integrity, LSA protection, vulnerable driver blocklist, kernel stack protection
 
-| Check | How it is read |
-|---|---|
-| TPM | `Tbsi_GetDeviceInfo` in `tbs.dll` (no admin needed). On when Windows can see a TPM. |
-| Secure Boot | `HKLM\SYSTEM\CurrentControlSet\Control\SecureBoot\State\UEFISecureBootEnabled` = 1. Off on legacy BIOS. |
-| Game Mode | `HKCU\Software\Microsoft\GameBar\AutoGameModeEnabled` (missing = On, Windows default). |
-| Hardware-accelerated GPU scheduling | `HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\HwSchMode` = 2. |
-| Fast Boot | `HKLM\...\Session Manager\Power\HiberbootEnabled` = 1 and hibernation enabled. |
+A separator line follows each section. Values are On or Off, except where Windows has a third state
+(Evaluation mode, Audit mode), a feature does not exist on the PC ("Not available on this PC"), or a value
+can only be read as administrator ("Needs admin to read").
 
 ## Build
 
