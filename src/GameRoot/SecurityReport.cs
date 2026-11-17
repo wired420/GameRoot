@@ -14,7 +14,8 @@ internal enum LineKind { SectionTitle, GroupTitle, Check, Separator }
 
 /// <summary>One line of the report: a heading, a check with its value, or a separator.</summary>
 /// <param name="Toggle">Set on a check whose setting the app can change; null for read-only rows.</param>
-internal sealed record ReportLine(LineKind Kind, int Depth, string Text, string? Value = null, IToggle? Toggle = null)
+/// <param name="OpenTarget">A Windows page (URI or console) to open for this row; null when there is none.</param>
+internal sealed record ReportLine(LineKind Kind, int Depth, string Text, string? Value = null, IToggle? Toggle = null, string? OpenTarget = null)
 {
     /// <summary>The on/off state a slider should show. Null when the value isn't a plain on/off.</summary>
     public bool? IsOn => Value switch { "On" => true, "Off" => false, _ => null };
@@ -37,6 +38,29 @@ internal static class SecurityReport
     ];
 
     private const int Indent = 2;
+
+    /// <summary>
+    /// The Windows page that shows a given row, so the app can open it instead of changing the
+    /// setting itself. These just launch Windows' own UI; GameRoot never flips these protections.
+    /// </summary>
+    private static string? OpenTargetFor(string? groupTitle, string checkName)
+    {
+        // TPM has its own management console.
+        if (checkName == "TPM")
+            return "tpm.msc";
+
+        // Each Windows Security group opens straight to its page in the Security app.
+        return groupTitle switch
+        {
+            "Virus & threat protection" => "windowsdefender://threat",
+            "Account protection" => "windowsdefender://account",
+            "Firewall & network protection" => "windowsdefender://network",
+            "App & browser control" => "windowsdefender://appbrowser",
+            "Exploit protection (system settings)" => "windowsdefender://exploitprotection",
+            "Device security" => "windowsdefender://devicesecurity",
+            _ => null,
+        };
+    }
 
     /// <summary>Runs every check and returns the report as structured lines for the status board.</summary>
     public static List<ReportLine> Scan()
@@ -61,7 +85,9 @@ internal static class SecurityReport
                     // A slider appears only when the value is a plain On/Off we can actually set.
                     var toggle = check as IToggle;
                     bool settable = toggle is not null && value is "On" or "Off";
-                    lines.Add(new ReportLine(LineKind.Check, depth, check.Name, value, settable ? toggle : null));
+                    // Read-only rows instead get a button that opens the matching Windows page.
+                    string? open = settable ? null : OpenTargetFor(group.Title, check.Name);
+                    lines.Add(new ReportLine(LineKind.Check, depth, check.Name, value, settable ? toggle : null, open));
                 }
             }
 

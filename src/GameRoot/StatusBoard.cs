@@ -29,13 +29,19 @@ internal sealed class StatusBoard : Panel
     private readonly Font _valueFont;
     private readonly Font _headerFont;
     private readonly Font _groupFont;
+    private readonly Font _tinyFont;
 
-    // Slider hit zones, in content coordinates, rebuilt on every paint.
+    // Control hit zones, in content coordinates, rebuilt on every paint.
     private readonly List<(Rectangle Rect, ReportLine Line)> _sliders = [];
+    private readonly List<(Rectangle Rect, ReportLine Line)> _openButtons = [];
     private int _hoverSlider = -1;
+    private int _hoverOpen = -1;
 
     /// <summary>Raised when the user clicks a slider. The handler applies the change and rescans.</summary>
     public event EventHandler<ReportLine>? ToggleRequested;
+
+    /// <summary>Raised when the user clicks a row's "Open" button. The handler opens the Windows page.</summary>
+    public event EventHandler<string>? OpenRequested;
 
     public StatusBoard()
     {
@@ -50,6 +56,7 @@ internal sealed class StatusBoard : Panel
         _valueFont = new Font(family, 10.5f, FontStyle.Bold);
         _headerFont = new Font(family, 12f, FontStyle.Bold);
         _groupFont = new Font(family, 10f, FontStyle.Bold);
+        _tinyFont = new Font(family, 7.5f, FontStyle.Bold);
 
         var copy = new ToolStripMenuItem("Copy report as text");
         copy.Click += (_, _) => { if (_lines.Count > 0) Clipboard.SetText(SecurityReport.ToText(_lines)); };
@@ -130,11 +137,13 @@ internal sealed class StatusBoard : Panel
     private int SliderWidth => S(34);
     private int SliderHeight => S(16);
 
-    /// <summary>True when any row can be toggled, so every row reserves a slot to keep labels aligned.</summary>
-    private bool HasToggles => _lines.Any(l => l.Toggle is not null);
+    /// <summary>True when any row has a control, so every row reserves a slot to keep labels aligned.</summary>
+    private bool HasControls => _lines.Any(l => l.Toggle is not null || l.OpenTarget is not null);
 
-    /// <summary>Left slot reserved for a slider on every check row (zero when nothing is toggleable).</summary>
-    private int SliderSlot => HasToggles ? SliderWidth + S(10) : 0;
+    private int OpenButtonWidth => S(46);
+
+    /// <summary>Left slot reserved for a slider or Open button on every check row.</summary>
+    private int SliderSlot => HasControls ? Math.Max(SliderWidth, OpenButtonWidth) + S(10) : 0;
 
     /// <summary>Width reserved right of each label for the light and its value text.</summary>
     private int ValueColumn()
@@ -176,6 +185,7 @@ internal sealed class StatusBoard : Panel
         g.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
 
         _sliders.Clear();
+        _openButtons.Clear();
         if (_lines.Count == 0)
         {
             DrawText(g, "SCANNING...", _headerFont, DimText, EdgeMargin, EdgeMargin, S(40));
@@ -307,12 +317,19 @@ internal sealed class StatusBoard : Panel
         int h = RowHeight;
         int lightX = right - valueCol;
 
-        // A slider sits at the start of the line for settings the app can change.
+        // A slider sits at the start of the line for settings the app can change; read-only rows
+        // with a Windows page instead get an "Open" button in the same slot.
         if (check.Toggle is not null && check.IsOn is bool on)
         {
             var slider = new Rectangle(x, y + (h - SliderHeight) / 2, SliderWidth, SliderHeight);
             DrawSlider(g, slider, on, _sliders.Count == _hoverSlider);
             _sliders.Add((slider, check));
+        }
+        else if (check.OpenTarget is not null)
+        {
+            var btn = new Rectangle(x, y + (h - SliderHeight) / 2, OpenButtonWidth, SliderHeight);
+            DrawOpenButton(g, btn, _openButtons.Count == _hoverOpen);
+            _openButtons.Add((btn, check));
         }
         int labelX = x + SliderSlot;
         DrawText(g, check.Text, _labelFont, LabelColor, labelX, y, h);
@@ -328,6 +345,22 @@ internal sealed class StatusBoard : Panel
         int d = LightSize;
         DrawLight(g, new Rectangle(lightX, y + (h - d) / 2, d, d), color, lit);
         DrawText(g, Display(check.Value), _valueFont, lit ? color : DimText, lightX + d + S(12), y, h);
+    }
+
+    /// <summary>A small steel button that opens the matching Windows page.</summary>
+    private void DrawOpenButton(Graphics g, Rectangle r, bool hover)
+    {
+        using (var path = Rounded(r, S(3)))
+        {
+            using var fill = new LinearGradientBrush(r,
+                hover ? Color.FromArgb(78, 82, 88) : PlateTop, PlateBottom, LinearGradientMode.Vertical);
+            g.FillPath(fill, path);
+            using var edge = new Pen(hover ? Hazard : Color.FromArgb(16, 17, 19));
+            g.DrawPath(edge, path);
+        }
+        TextRenderer.DrawText(g, "OPEN ↗", _tinyFont, r, hover ? Color.White : Color.FromArgb(222, 226, 230),
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix |
+            TextFormatFlags.PreserveGraphicsTranslateTransform);
     }
 
     /// <summary>A toggle slider: red when the setting is on, dark when off.</summary>
@@ -485,35 +518,51 @@ internal sealed class StatusBoard : Panel
     /// <summary>Converts a mouse point to the scrolled content coordinates used for drawing.</summary>
     private Point ToContent(Point p) => new(p.X - AutoScrollPosition.X, p.Y - AutoScrollPosition.Y);
 
-    private int SliderAt(Point mouse)
+    private static int HitAt(List<(Rectangle Rect, ReportLine Line)> zones, Point p)
     {
-        var p = ToContent(mouse);
-        for (int i = 0; i < _sliders.Count; i++)
-            if (_sliders[i].Rect.Contains(p)) return i;
+        for (int i = 0; i < zones.Count; i++)
+            if (zones[i].Rect.Contains(p)) return i;
         return -1;
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        int hit = SliderAt(e.Location);
-        Cursor = hit >= 0 ? Cursors.Hand : Cursors.Default;
-        if (hit != _hoverSlider) { _hoverSlider = hit; Invalidate(); }
+        var p = ToContent(e.Location);
+        int slider = HitAt(_sliders, p);
+        int open = HitAt(_openButtons, p);
+        Cursor = (slider >= 0 || open >= 0) ? Cursors.Hand : Cursors.Default;
+        if (slider != _hoverSlider || open != _hoverOpen)
+        {
+            _hoverSlider = slider;
+            _hoverOpen = open;
+            Invalidate();
+        }
     }
 
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
-        if (_hoverSlider != -1) { _hoverSlider = -1; Invalidate(); }
+        if (_hoverSlider != -1 || _hoverOpen != -1)
+        {
+            _hoverSlider = -1;
+            _hoverOpen = -1;
+            Invalidate();
+        }
     }
 
     protected override void OnMouseClick(MouseEventArgs e)
     {
         base.OnMouseClick(e);
         if (e.Button != MouseButtons.Left) return;
-        int hit = SliderAt(e.Location);
-        if (hit >= 0)
-            ToggleRequested?.Invoke(this, _sliders[hit].Line);
+        var p = ToContent(e.Location);
+
+        int slider = HitAt(_sliders, p);
+        if (slider >= 0) { ToggleRequested?.Invoke(this, _sliders[slider].Line); return; }
+
+        int open = HitAt(_openButtons, p);
+        if (open >= 0 && _openButtons[open].Line.OpenTarget is { } target)
+            OpenRequested?.Invoke(this, target);
     }
 
     protected override void Dispose(bool disposing)
@@ -524,6 +573,7 @@ internal sealed class StatusBoard : Panel
             _valueFont.Dispose();
             _headerFont.Dispose();
             _groupFont.Dispose();
+            _tinyFont.Dispose();
         }
         base.Dispose(disposing);
     }

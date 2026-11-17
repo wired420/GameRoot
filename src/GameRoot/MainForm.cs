@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Collections;
 
 namespace GameRoot;
@@ -53,8 +54,23 @@ internal sealed class MainForm : Form
         Theme.DarkScrollBars(_board);
 
         _board.ToggleRequested += OnToggleRequested;
+        _board.OpenRequested += OnOpenRequested;
 
         Shown += async (_, _) => await LoadAllAsync();
+    }
+
+    /// <summary>Opens the Windows page or console for a read-only row. GameRoot changes nothing itself.</summary>
+    private void OnOpenRequested(object? sender, string target)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+            _status.Text = "Opened the Windows settings page. Change it there if you want to.";
+        }
+        catch (Exception ex)
+        {
+            _status.Text = $"Could not open that page: {ex.Message}";
+        }
     }
 
     /// <summary>Flips a setting when its slider is clicked, then rescans the Security tab.</summary>
@@ -155,7 +171,7 @@ internal sealed class MainForm : Form
         {
             1 => $"{_services.Items.Count} services running",
             2 => $"{_drivers.Items.Count} drivers loaded",
-            _ => "Red = on, green = off. Sliders change the Windows Settings; the rest is read-only. Right-click to copy.",
+            _ => "Red = on, green = off. Sliders change a setting; Open jumps to its Windows page. Right-click to copy.",
         };
     }
 
