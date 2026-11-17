@@ -50,32 +50,104 @@ internal sealed class StatusBoard : Panel
     public void SetLines(IReadOnlyList<ReportLine> lines)
     {
         _lines = lines;
-        AutoScrollMinSize = new Size(MinWidth(), TotalHeight());
+        _sections = BuildSections(lines);
+        UpdateScrollSize();
         Invalidate();
     }
+
+    // ---- Structure rebuilt from the flat report lines ----
+
+    private sealed class BoardGroup(string? title)
+    {
+        public string? Title { get; } = title;
+        public List<ReportLine> Checks { get; } = [];
+    }
+
+    private sealed class BoardSection(string? title)
+    {
+        public string? Title { get; } = title;
+        public List<BoardGroup> Groups { get; } = [];
+        /// <summary>A simple section has no group headings (BIOS Settings, Windows Settings).</summary>
+        public bool IsSimple => Groups.All(g => g.Title is null);
+    }
+
+    private List<BoardSection> _sections = [];
+
+    private static List<BoardSection> BuildSections(IReadOnlyList<ReportLine> lines)
+    {
+        var result = new List<BoardSection>();
+        BoardSection? section = null;
+        BoardGroup? group = null;
+        foreach (var l in lines)
+        {
+            switch (l.Kind)
+            {
+                case LineKind.SectionTitle:
+                    section = new BoardSection(l.Text);
+                    result.Add(section);
+                    group = null;
+                    break;
+                case LineKind.GroupTitle:
+                    if (section is null) { section = new BoardSection(null); result.Add(section); }
+                    group = new BoardGroup(l.Text);
+                    section.Groups.Add(group);
+                    break;
+                case LineKind.Check:
+                    if (section is null) { section = new BoardSection(null); result.Add(section); }
+                    if (group is null) { group = new BoardGroup(null); section.Groups.Add(group); }
+                    group.Checks.Add(l);
+                    break;
+                case LineKind.Separator:
+                    section = null;
+                    group = null;
+                    break;
+            }
+        }
+        return result;
+    }
+
+    // ---- Layout ----
 
     private float DpiScale => DeviceDpi / 96f;
     private int S(float v) => (int)Math.Round(v * DpiScale);
 
-    private int RowHeight(LineKind kind) => kind switch
-    {
-        LineKind.SectionTitle => S(40),
-        LineKind.GroupTitle => S(34),
-        LineKind.Separator => S(26),
-        _ => S(30),
-    };
+    private int EdgeMargin => S(16);
+    private int Gutter => S(28);
+    private int PlateHeight => S(34);
+    private int RowHeight => S(26);
+    private int GroupHeight => S(30);
+    private int LightSize => S(16);
 
-    private int TotalHeight() => S(16) + _lines.Sum(l => RowHeight(l.Kind)) + S(16);
-
-    private int LabelColumnWidth()
+    /// <summary>Width reserved right of each label for the light and its value text.</summary>
+    private int ValueColumn()
     {
-        int max = 0;
+        int max = TextRenderer.MeasureText("OFF", _valueFont).Width;
         foreach (var l in _lines.Where(l => l.Kind == LineKind.Check))
-            max = Math.Max(max, S(28) + l.Depth * S(20) + TextRenderer.MeasureText(l.Text, _labelFont).Width);
-        return max + S(24);
+            max = Math.Max(max, TextRenderer.MeasureText(Display(l.Value), _valueFont).Width);
+        return LightSize + S(14) + max + S(8);
     }
 
-    private int MinWidth() => LabelColumnWidth() + S(220);
+    private int MinColumnWidth()
+    {
+        int label = 0;
+        foreach (var l in _lines.Where(l => l.Kind == LineKind.Check))
+            label = Math.Max(label, TextRenderer.MeasureText(l.Text, _labelFont).Width);
+        return S(16) + label + S(24) + ValueColumn();
+    }
+
+    private int MinWidth() => EdgeMargin * 2 + Gutter + MinColumnWidth() * 2;
+
+    private void UpdateScrollSize()
+    {
+        int width = Math.Max(ClientSize.Width, MinWidth());
+        AutoScrollMinSize = new Size(MinWidth(), Render(null, width));
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (_lines.Count > 0) UpdateScrollSize();
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -85,59 +157,149 @@ internal sealed class StatusBoard : Panel
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         g.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
 
-        int width = Math.Max(ClientSize.Width, MinWidth());
-        int labelCol = LabelColumnWidth();
-        int y = S(16);
-        int margin = S(16);
-
         if (_lines.Count == 0)
         {
-            DrawText(g, "SCANNING...", _headerFont, DimText, margin, y, S(40));
+            DrawText(g, "SCANNING...", _headerFont, DimText, EdgeMargin, EdgeMargin, S(40));
             return;
         }
+        Render(g, Math.Max(ClientSize.Width, MinWidth()));
+    }
 
-        foreach (var line in _lines)
+    /// <summary>
+    /// Lays out (and, when g is not null, draws) the board. Simple sections sit side by side in two
+    /// columns; a section with group headings gets a full-width nameplate and its groups split into
+    /// two balanced columns. Returns the total height.
+    /// </summary>
+    private int Render(Graphics? g, int width)
+    {
+        int m = EdgeMargin;
+        int colW = (width - m * 2 - Gutter) / 2;
+        int xL = m, xR = m + colW + Gutter;
+        int y = m;
+        int valueCol = ValueColumn();
+
+        for (int i = 0; i < _sections.Count; i++)
         {
-            int h = RowHeight(line.Kind);
-            switch (line.Kind)
+            var section = _sections[i];
+            if (section.IsSimple)
             {
-                case LineKind.SectionTitle:
-                    DrawPlate(g, new Rectangle(margin, y + S(4), width - margin * 2, h - S(8)), line.Text.ToUpperInvariant(), _headerFont);
-                    break;
-
-                case LineKind.GroupTitle:
-                {
-                    int x = margin + S(12) + line.Depth * S(20);
-                    DrawText(g, line.Text.ToUpperInvariant(), _groupFont, Hazard, x, y + S(6), h - S(6));
-                    using var pen = new Pen(Color.FromArgb(90, Hazard), 1);
-                    g.DrawLine(pen, x, y + h - S(4), width - margin - S(12), y + h - S(4));
-                    break;
-                }
-
-                case LineKind.Check:
-                {
-                    int x = margin + S(12) + line.Depth * S(20);
-                    DrawText(g, line.Text, _labelFont, LabelColor, x, y, h);
-
-                    // Dotted leader from the label to the light.
-                    int textW = TextRenderer.MeasureText(line.Text, _labelFont).Width;
-                    using (var dots = new Pen(Color.FromArgb(55, 60, 66), 1) { DashStyle = DashStyle.Dot })
-                        g.DrawLine(dots, x + textW + S(6), y + h / 2, labelCol - S(10), y + h / 2);
-
-                    var (color, lit) = ColorFor(line.Value);
-                    int d = S(16);
-                    DrawLight(g, new Rectangle(labelCol, y + (h - d) / 2, d, d), color, lit);
-                    string value = Display(line.Value);
-                    DrawText(g, value, _valueFont, lit ? color : DimText, labelCol + d + S(12), y, h);
-                    break;
-                }
-
-                case LineKind.Separator:
-                    DrawSeam(g, margin, width - margin, y + h / 2);
-                    break;
+                var right = i + 1 < _sections.Count && _sections[i + 1].IsSimple ? _sections[++i] : null;
+                int hL = SimpleCard(g, section, xL, y, colW, valueCol);
+                int hR = right is null ? 0 : SimpleCard(g, right, xR, y, colW, valueCol);
+                y += Math.Max(hL, hR);
             }
-            y += h;
+            else
+            {
+                if (section.Title is not null)
+                {
+                    if (g is not null)
+                        DrawPlate(g, new Rectangle(m, y, width - m * 2, PlateHeight), section.Title.ToUpperInvariant(), _headerFont);
+                    y += PlateHeight + S(4);
+                }
+                var (left, rightGroups) = SplitGroups(section.Groups);
+                int yl = GroupColumn(g, left, xL, y, colW, valueCol);
+                int yr = GroupColumn(g, rightGroups, xR, y, colW, valueCol);
+                y = Math.Max(yl, yr);
+            }
+
+            // Seam between blocks.
+            y += S(10);
+            if (g is not null)
+                DrawSeam(g, m, width - m, y);
+            y += S(14);
         }
+        return y + m;
+    }
+
+    private int SimpleCard(Graphics? g, BoardSection section, int x, int y, int w, int valueCol)
+    {
+        int top = y;
+        if (section.Title is not null)
+        {
+            if (g is not null)
+                DrawPlate(g, new Rectangle(x, y, w, PlateHeight), section.Title.ToUpperInvariant(), _headerFont);
+            y += PlateHeight + S(4);
+        }
+        foreach (var check in section.Groups.SelectMany(gr => gr.Checks))
+        {
+            if (g is not null) DrawCheck(g, check, x + S(16), x + w, y, valueCol);
+            y += RowHeight;
+        }
+        return y - top;
+    }
+
+    private int GroupColumn(Graphics? g, List<BoardGroup> groups, int x, int y, int w, int valueCol)
+    {
+        foreach (var group in groups)
+        {
+            if (group.Title is not null)
+            {
+                if (g is not null)
+                {
+                    DrawText(g, group.Title.ToUpperInvariant(), _groupFont, Hazard, x + S(8), y + S(6), GroupHeight - S(6));
+                    using var pen = new Pen(Color.FromArgb(90, Hazard), 1);
+                    g.DrawLine(pen, x + S(8), y + GroupHeight - S(3), x + w - S(4), y + GroupHeight - S(3));
+                }
+                y += GroupHeight;
+            }
+            foreach (var check in group.Checks)
+            {
+                if (g is not null) DrawCheck(g, check, x + S(16), x + w, y, valueCol);
+                y += RowHeight;
+            }
+            y += S(4);
+        }
+        return y;
+    }
+
+    /// <summary>
+    /// Splits groups into two columns of as close to equal height as possible, so the whole board
+    /// fits without scrolling. Groups keep their original order within each column.
+    /// </summary>
+    private (List<BoardGroup> Left, List<BoardGroup> Right) SplitGroups(List<BoardGroup> groups)
+    {
+        int Height(BoardGroup gr) => (gr.Title is null ? 0 : GroupHeight) + gr.Checks.Count * RowHeight + S(4);
+        int n = Math.Min(groups.Count, 16);
+        int bestMask = 0, bestCost = int.MaxValue;
+        // Group 0 always goes left, so each split is only tried once.
+        for (int mask = 1; mask < (1 << n); mask += 2)
+        {
+            int left = 0, right = 0;
+            for (int i = 0; i < n; i++)
+                if ((mask & (1 << i)) != 0) left += Height(groups[i]); else right += Height(groups[i]);
+            int cost = Math.Max(left, right);
+            if (cost < bestCost) { bestCost = cost; bestMask = mask; }
+        }
+        var l = new List<BoardGroup>();
+        var r = new List<BoardGroup>();
+        for (int i = 0; i < groups.Count; i++)
+            ((i < n && (bestMask & (1 << i)) != 0) ? l : r).Add(groups[i]);
+        return (l, r);
+    }
+
+    /// <summary>Height needed to show the whole board without scrolling.</summary>
+    public int ContentHeight => _lines.Count == 0 ? 0 : Render(null, Math.Max(ClientSize.Width, MinWidth()));
+
+    /// <summary>Width needed to show the whole board without scrolling.</summary>
+    public int ContentWidth => _lines.Count == 0 ? 0 : MinWidth();
+
+    private void DrawCheck(Graphics g, ReportLine check, int x, int right, int y, int valueCol)
+    {
+        int h = RowHeight;
+        int lightX = right - valueCol;
+        DrawText(g, check.Text, _labelFont, LabelColor, x, y, h);
+
+        int textW = TextRenderer.MeasureText(check.Text, _labelFont).Width;
+        if (lightX - S(10) > x + textW + S(6))
+        {
+            using var dots = new Pen(Color.FromArgb(55, 60, 66), 1) { DashStyle = DashStyle.Dot };
+            g.DrawLine(dots, x + textW + S(6), y + h / 2, lightX - S(10), y + h / 2);
+        }
+
+        var (color, lit) = ColorFor(check.Value);
+        int d = LightSize;
+        DrawLight(g, new Rectangle(lightX, y + (h - d) / 2, d, d), color, lit);
+        DrawText(g, Display(check.Value), _valueFont, lit ? color : DimText, lightX + d + S(12), y, h);
     }
 
     private static (Color Color, bool Lit) ColorFor(string? value) => value switch

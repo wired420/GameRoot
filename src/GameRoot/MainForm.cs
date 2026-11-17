@@ -13,7 +13,7 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         Text = "GameRoot - system check (read-only, nothing is changed)";
-        Size = new Size(1000, 760);
+        Size = new Size(1100, 820);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.Background;
         ForeColor = Theme.Text;
@@ -60,11 +60,27 @@ internal sealed class MainForm : Form
         var drivers = Task.Run(() => Safe(SystemLists.LoadedDrivers));
 
         _board.SetLines(await report);
+        FitToBoard();
         Fill(_services, await services);
         Fill(_drivers, await drivers);
 
         UseWaitCursor = false;
         UpdateStatus();
+    }
+
+    /// <summary>Grows the window, within the screen, so the Security tab fits without scrolling.</summary>
+    private void FitToBoard()
+    {
+        if (WindowState != FormWindowState.Normal) return;
+        var area = Screen.FromControl(this).WorkingArea;
+        int extraW = Math.Max(0, _board.ContentWidth - _board.ClientSize.Width);
+        int extraH = Math.Max(0, _board.ContentHeight - _board.ClientSize.Height);
+        if (extraW == 0 && extraH == 0) return;
+
+        var bounds = new Rectangle(Left, Top, Math.Min(Width + extraW, area.Width), Math.Min(Height + extraH, area.Height));
+        bounds.X = Math.Max(area.Left, Math.Min(bounds.X, area.Right - bounds.Width));
+        bounds.Y = Math.Max(area.Top, Math.Min(bounds.Y, area.Bottom - bounds.Height));
+        Bounds = bounds;
     }
 
     private void UpdateStatus()
