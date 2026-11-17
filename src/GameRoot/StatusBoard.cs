@@ -133,7 +133,7 @@ internal sealed class StatusBoard : Panel
                 }
 
                 case LineKind.Separator:
-                    DrawHazardStripe(g, new Rectangle(margin, y + h / 2 - S(3), width - margin * 2, S(6)));
+                    DrawSeam(g, margin, width - margin, y + h / 2);
                     break;
             }
             y += h;
@@ -159,7 +159,8 @@ internal sealed class StatusBoard : Panel
     private static void DrawText(Graphics g, string text, Font font, Color color, int x, int y, int h)
     {
         TextRenderer.DrawText(g, text, font, new Rectangle(x, y, 2000, h), color,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding |
+            TextFormatFlags.PreserveGraphicsTranslateTransform);
     }
 
     /// <summary>A brushed-steel nameplate with rivets.</summary>
@@ -185,28 +186,13 @@ internal sealed class StatusBoard : Panel
         DrawText(g, text, font, Color.FromArgb(235, 238, 240), r.Left + S(24), r.Top, r.Height);
     }
 
-    /// <summary>Yellow and black diagonal hazard stripe used as the separator.</summary>
-    private void DrawHazardStripe(Graphics g, Rectangle r)
+    /// <summary>A subtle engraved seam across the panel, used as the separator.</summary>
+    private static void DrawSeam(Graphics g, int left, int right, int y)
     {
-        using var path = Rounded(r, S(2));
-        var clip = g.Clip;
-        g.SetClip(path);
-        using (var yellow = new SolidBrush(Color.FromArgb(200, Hazard)))
-            g.FillRectangle(yellow, r);
-        using (var black = new SolidBrush(Color.FromArgb(28, 28, 30)))
-        {
-            int step = S(14);
-            for (int x = r.Left - r.Height; x < r.Right + r.Height; x += step)
-            {
-                var poly = new[]
-                {
-                    new Point(x, r.Bottom), new Point(x + step / 2, r.Bottom),
-                    new Point(x + step / 2 + r.Height, r.Top), new Point(x + r.Height, r.Top),
-                };
-                g.FillPolygon(black, poly);
-            }
-        }
-        g.Clip = clip;
+        using var groove = new Pen(Color.FromArgb(10, 11, 12), 1);
+        using var light = new Pen(Color.FromArgb(58, 62, 68), 1);
+        g.DrawLine(groove, left, y, right, y);
+        g.DrawLine(light, left, y + 1, right, y + 1);
     }
 
     /// <summary>An indicator lamp: dark bezel, coloured lens with a soft glow and a specular highlight.</summary>
