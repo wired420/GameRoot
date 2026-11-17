@@ -10,6 +10,11 @@ internal sealed record Group(string? Title, ICheck[] Checks);
 /// <summary>A section of the report. A separator line is printed after each section.</summary>
 internal sealed record Section(string? Title, params Group[] Groups);
 
+internal enum LineKind { SectionTitle, GroupTitle, Check, Separator }
+
+/// <summary>One line of the report: a heading, a check with its value, or a separator.</summary>
+internal sealed record ReportLine(LineKind Kind, int Depth, string Text, string? Value = null);
+
 /// <summary>Builds the read-only security report shown on the Security tab.</summary>
 internal static class SecurityReport
 {
@@ -28,39 +33,47 @@ internal static class SecurityReport
 
     private const int Indent = 2;
 
-    public static string Build()
+    /// <summary>Runs every check and returns the report as structured lines for the status board.</summary>
+    public static List<ReportLine> Scan()
     {
         WmiHelper.ClearCache();
-        var sections = Sections();
+        var lines = new List<ReportLine>();
 
-        int width = sections
-            .SelectMany(s => s.Groups.Select(g => (Depth: Depth(s, g), g.Checks)))
-            .SelectMany(x => x.Checks.Select(c => x.Depth * Indent + c.Name.Length))
-            .Max() + 2;
-        string separator = new('-', width + 18);
-
-        var sb = new StringBuilder();
-        sb.AppendLine(separator);
-
-        foreach (var section in sections)
+        foreach (var section in Sections())
         {
             if (section.Title is not null)
-                sb.AppendLine(section.Title);
+                lines.Add(new ReportLine(LineKind.SectionTitle, 0, section.Title));
 
             foreach (var group in section.Groups)
             {
                 int depth = Depth(section, group);
                 if (group.Title is not null)
-                    sb.AppendLine($"{Pad(depth - 1)}{group.Title}");
+                    lines.Add(new ReportLine(LineKind.GroupTitle, depth - 1, group.Title));
 
                 foreach (var check in group.Checks)
-                {
-                    string label = Pad(depth) + check.Name;
-                    sb.AppendLine($"{label.PadRight(width)}: {Run(check).Value}");
-                }
+                    lines.Add(new ReportLine(LineKind.Check, depth, check.Name, Run(check).Value));
             }
 
-            sb.AppendLine(separator);
+            lines.Add(new ReportLine(LineKind.Separator, 0, ""));
+        }
+        return lines;
+    }
+
+    /// <summary>The report as plain text, for copying to the clipboard.</summary>
+    public static string ToText(IReadOnlyList<ReportLine> lines)
+    {
+        int width = lines.Where(l => l.Kind == LineKind.Check).Select(l => l.Depth * Indent + l.Text.Length).DefaultIfEmpty(0).Max() + 2;
+        string separator = new('-', width + 18);
+        var sb = new StringBuilder();
+        sb.AppendLine(separator);
+        foreach (var l in lines)
+        {
+            sb.AppendLine(l.Kind switch
+            {
+                LineKind.Separator => separator,
+                LineKind.Check => $"{(Pad(l.Depth) + l.Text).PadRight(width)}: {l.Value}",
+                _ => Pad(l.Depth) + l.Text,
+            });
         }
         return sb.ToString();
     }

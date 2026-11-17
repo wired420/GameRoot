@@ -5,16 +5,7 @@ namespace GameRoot;
 internal sealed class MainForm : Form
 {
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
-    private readonly TextBox _securityText = new()
-    {
-        Dock = DockStyle.Fill,
-        Multiline = true,
-        ReadOnly = true,
-        ScrollBars = ScrollBars.Both,
-        WordWrap = false,
-        Font = new Font("Consolas", 10f),
-        BackColor = SystemColors.Window,
-    };
+    private readonly StatusBoard _board = new() { Dock = DockStyle.Fill };
     private readonly ListView _services = NewList(SystemLists.ServiceColumns);
     private readonly ListView _drivers = NewList(SystemLists.DriverColumns);
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
@@ -26,7 +17,7 @@ internal sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
 
         var security = new TabPage("Security");
-        security.Controls.Add(_securityText);
+        security.Controls.Add(_board);
         var services = new TabPage("Services");
         services.Controls.Add(_services);
         var drivers = new TabPage("Drivers");
@@ -52,12 +43,11 @@ internal sealed class MainForm : Form
         UseWaitCursor = true;
         _status.Text = "Scanning...";
 
-        var report = Task.Run(SecurityReport.Build);
+        var report = Task.Run(SecurityReport.Scan);
         var services = Task.Run(() => Safe(SystemLists.RunningServices));
         var drivers = Task.Run(() => Safe(SystemLists.LoadedDrivers));
 
-        _securityText.Text = (await report).ReplaceLineEndings("\r\n");
-        _securityText.SelectionStart = 0;
+        _board.SetLines(await report);
         Fill(_services, await services);
         Fill(_drivers, await drivers);
 
@@ -71,7 +61,7 @@ internal sealed class MainForm : Form
         {
             1 => $"{_services.Items.Count} services running",
             2 => $"{_drivers.Items.Count} drivers loaded",
-            _ => "Read-only scan. Nothing on this PC is changed.",
+            _ => "Read-only scan. Nothing on this PC is changed. Red = on, green = off. Right-click to copy as text.",
         };
     }
 
