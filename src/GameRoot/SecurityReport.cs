@@ -13,7 +13,12 @@ internal sealed record Section(string? Title, params Group[] Groups);
 internal enum LineKind { SectionTitle, GroupTitle, Check, Separator }
 
 /// <summary>One line of the report: a heading, a check with its value, or a separator.</summary>
-internal sealed record ReportLine(LineKind Kind, int Depth, string Text, string? Value = null);
+/// <param name="Toggle">Set on a check whose setting the app can change; null for read-only rows.</param>
+internal sealed record ReportLine(LineKind Kind, int Depth, string Text, string? Value = null, IToggle? Toggle = null)
+{
+    /// <summary>The on/off state a slider should show. Null when the value isn't a plain on/off.</summary>
+    public bool? IsOn => Value switch { "On" => true, "Off" => false, _ => null };
+}
 
 /// <summary>Builds the read-only security report shown on the Security tab.</summary>
 internal static class SecurityReport
@@ -51,7 +56,13 @@ internal static class SecurityReport
                     lines.Add(new ReportLine(LineKind.GroupTitle, depth - 1, group.Title));
 
                 foreach (var check in group.Checks)
-                    lines.Add(new ReportLine(LineKind.Check, depth, check.Name, Run(check).Value));
+                {
+                    string value = Run(check).Value;
+                    // A slider appears only when the value is a plain On/Off we can actually set.
+                    var toggle = check as IToggle;
+                    bool settable = toggle is not null && value is "On" or "Off";
+                    lines.Add(new ReportLine(LineKind.Check, depth, check.Name, value, settable ? toggle : null));
+                }
             }
 
             lines.Add(new ReportLine(LineKind.Separator, 0, ""));

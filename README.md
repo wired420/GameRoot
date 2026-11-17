@@ -6,8 +6,12 @@ A Windows app that scans PC settings and reports each one as **On** or **Off**. 
 - **Services**: every running Windows service.
 - **Drivers**: every loaded driver.
 
-Click a column header to sort, and Ctrl+C copies selected rows.
-Version 1 is read-only: it changes nothing.
+Click a column header to sort, and Ctrl+C copies selected rows. **Export report...** in the bottom bar
+saves all three tabs to a text file.
+
+GameRoot runs as administrator (it prompts via UAC on launch). The scan is read-only, with one exception:
+the **Windows Settings** (Game Mode, GPU scheduling, Fast Boot) have a slider at the start of their row to
+turn them on or off. The Windows Security protections and BIOS items are shown but never changed by the app.
 
 ## What it checks
 
@@ -35,9 +39,11 @@ dotnet build src/GameRoot/GameRoot.csproj -c Release
 ```
 
 The output is `bin/Release/net481/GameRoot.exe` (about 50 KB) plus `GameRoot.exe.config`, which holds
-high-DPI settings; keep the two together. Every push also builds them in GitHub Actions.
+high-DPI settings; keep the two together. Every push also builds them in GitHub Actions. The app manifest
+requests administrator rights, so debugging from Visual Studio needs VS run as administrator.
 
 ## Adding a check
 
 Implement `ICheck` in `src/GameRoot/Checks/` and add it to a section in `SecurityReport.cs`. Each section is
-followed by a separator line.
+followed by a separator line. To let a setting be changed as well as read, also implement `IToggle`; a slider
+then appears on its row. This is reserved for non-security settings.

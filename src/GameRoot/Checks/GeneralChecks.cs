@@ -3,24 +3,29 @@ using Microsoft.Win32;
 namespace GameRoot.Checks;
 
 /// <summary>Game Mode. Windows treats a missing value as on.</summary>
-public sealed class GameModeCheck : ICheck
+public sealed class GameModeCheck : ICheck, IToggle
 {
     public string Name => "Game Mode";
+    public bool NeedsReboot => false;
 
     public CheckResult Run()
     {
         int? v = RegistryHelper.ReadDword(RegistryHive.CurrentUser, @"Software\Microsoft\GameBar", "AutoGameModeEnabled");
         return CheckResult.OnOff(v != 0);
     }
+
+    public void Set(bool on) =>
+        RegistryHelper.WriteDword(RegistryHive.CurrentUser, @"Software\Microsoft\GameBar", "AutoGameModeEnabled", on ? 1 : 0);
 }
 
 /// <summary>
 /// Hardware-accelerated GPU scheduling (HwSchMode: 2 = on, 1 = off).
 /// A missing value means the toggle has never been turned on, so it reads as off.
 /// </summary>
-public sealed class GpuSchedulingCheck : ICheck
+public sealed class GpuSchedulingCheck : ICheck, IToggle
 {
     public string Name => "Hardware-accelerated GPU scheduling";
+    public bool NeedsReboot => true;
 
     public CheckResult Run()
     {
@@ -28,15 +33,20 @@ public sealed class GpuSchedulingCheck : ICheck
             @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode");
         return CheckResult.OnOff(v == 2);
     }
+
+    public void Set(bool on) =>
+        RegistryHelper.WriteDword(RegistryHive.LocalMachine,
+            @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", on ? 2 : 1);
 }
 
 /// <summary>
 /// Fast startup (fast boot). It only takes effect when HiberbootEnabled is 1 and
 /// hibernation is available, so both must be on for this to read On.
 /// </summary>
-public sealed class FastStartupCheck : ICheck
+public sealed class FastStartupCheck : ICheck, IToggle
 {
     public string Name => "Fast Boot";
+    public bool NeedsReboot => false;
 
     public CheckResult Run()
     {
@@ -47,4 +57,8 @@ public sealed class FastStartupCheck : ICheck
 
         return CheckResult.OnOff(hiberboot == 1 && hibernate != 0);
     }
+
+    public void Set(bool on) =>
+        RegistryHelper.WriteDword(RegistryHive.LocalMachine,
+            @"SYSTEM\CurrentControlSet\Control\Session Manager\Power", "HiberbootEnabled", on ? 1 : 0);
 }

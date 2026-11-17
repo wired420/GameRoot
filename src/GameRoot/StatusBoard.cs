@@ -21,11 +21,21 @@ internal sealed class StatusBoard : Panel
     private static readonly Color Amber = Color.FromArgb(255, 170, 0);
     private static readonly Color Unlit = Color.FromArgb(70, 72, 76);
 
+    private static readonly Color SliderTrackOff = Color.FromArgb(52, 56, 61);
+    private static readonly Color SliderTrackOn = Color.FromArgb(150, 40, 34);
+
     private IReadOnlyList<ReportLine> _lines = [];
     private readonly Font _labelFont;
     private readonly Font _valueFont;
     private readonly Font _headerFont;
     private readonly Font _groupFont;
+
+    // Slider hit zones, in content coordinates, rebuilt on every paint.
+    private readonly List<(Rectangle Rect, ReportLine Line)> _sliders = [];
+    private int _hoverSlider = -1;
+
+    /// <summary>Raised when the user clicks a slider. The handler applies the change and rescans.</summary>
+    public event EventHandler<ReportLine>? ToggleRequested;
 
     public StatusBoard()
     {
@@ -117,6 +127,14 @@ internal sealed class StatusBoard : Panel
     private int RowHeight => S(26);
     private int GroupHeight => S(30);
     private int LightSize => S(16);
+    private int SliderWidth => S(34);
+    private int SliderHeight => S(16);
+
+    /// <summary>True when any row can be toggled, so every row reserves a slot to keep labels aligned.</summary>
+    private bool HasToggles => _lines.Any(l => l.Toggle is not null);
+
+    /// <summary>Left slot reserved for a slider on every check row (zero when nothing is toggleable).</summary>
+    private int SliderSlot => HasToggles ? SliderWidth + S(10) : 0;
 
     /// <summary>Width reserved right of each label for the light and its value text.</summary>
     private int ValueColumn()
@@ -132,7 +150,7 @@ internal sealed class StatusBoard : Panel
         int label = 0;
         foreach (var l in _lines.Where(l => l.Kind == LineKind.Check))
             label = Math.Max(label, TextRenderer.MeasureText(l.Text, _labelFont).Width);
-        return S(16) + label + S(24) + ValueColumn();
+        return S(16) + SliderSlot + label + S(24) + ValueColumn();
     }
 
     private int MinWidth() => EdgeMargin * 2 + Gutter + MinColumnWidth() * 2;
@@ -157,6 +175,7 @@ internal sealed class StatusBoard : Panel
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         g.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
 
+        _sliders.Clear();
         if (_lines.Count == 0)
         {
             DrawText(g, "SCANNING...", _headerFont, DimText, EdgeMargin, EdgeMargin, S(40));
@@ -287,19 +306,51 @@ internal sealed class StatusBoard : Panel
     {
         int h = RowHeight;
         int lightX = right - valueCol;
-        DrawText(g, check.Text, _labelFont, LabelColor, x, y, h);
+
+        // A slider sits at the start of the line for settings the app can change.
+        if (check.Toggle is not null && check.IsOn is bool on)
+        {
+            var slider = new Rectangle(x, y + (h - SliderHeight) / 2, SliderWidth, SliderHeight);
+            DrawSlider(g, slider, on, _sliders.Count == _hoverSlider);
+            _sliders.Add((slider, check));
+        }
+        int labelX = x + SliderSlot;
+        DrawText(g, check.Text, _labelFont, LabelColor, labelX, y, h);
 
         int textW = TextRenderer.MeasureText(check.Text, _labelFont).Width;
-        if (lightX - S(10) > x + textW + S(6))
+        if (lightX - S(10) > labelX + textW + S(6))
         {
             using var dots = new Pen(Color.FromArgb(55, 60, 66), 1) { DashStyle = DashStyle.Dot };
-            g.DrawLine(dots, x + textW + S(6), y + h / 2, lightX - S(10), y + h / 2);
+            g.DrawLine(dots, labelX + textW + S(6), y + h / 2, lightX - S(10), y + h / 2);
         }
 
         var (color, lit) = ColorFor(check.Value);
         int d = LightSize;
         DrawLight(g, new Rectangle(lightX, y + (h - d) / 2, d, d), color, lit);
         DrawText(g, Display(check.Value), _valueFont, lit ? color : DimText, lightX + d + S(12), y, h);
+    }
+
+    /// <summary>A toggle slider: red when the setting is on, dark when off.</summary>
+    private void DrawSlider(Graphics g, Rectangle r, bool on, bool hover)
+    {
+        using (var path = Rounded(r, r.Height / 2))
+        {
+            using var track = new SolidBrush(on ? SliderTrackOn : SliderTrackOff);
+            g.FillPath(track, path);
+            using var edge = new Pen(hover ? Hazard : Color.FromArgb(16, 17, 19));
+            g.DrawPath(edge, path);
+        }
+
+        int d = r.Height - S(4);
+        int knobX = on ? r.Right - d - S(2) : r.Left + S(2);
+        var knob = new Rectangle(knobX, r.Top + S(2), d, d);
+        using (var kb = new LinearGradientBrush(knob, Color.FromArgb(235, 238, 242), Color.FromArgb(150, 154, 160), 70f))
+            g.FillEllipse(kb, knob);
+        if (on)
+        {
+            using var glow = new SolidBrush(Color.FromArgb(70, Red));
+            g.FillEllipse(glow, Rectangle.Inflate(knob, S(2), S(2)));
+        }
     }
 
     private static (Color Color, bool Lit) ColorFor(string? value) => value switch
@@ -429,6 +480,40 @@ internal sealed class StatusBoard : Panel
     {
         base.OnMouseWheel(e);
         Invalidate();
+    }
+
+    /// <summary>Converts a mouse point to the scrolled content coordinates used for drawing.</summary>
+    private Point ToContent(Point p) => new(p.X - AutoScrollPosition.X, p.Y - AutoScrollPosition.Y);
+
+    private int SliderAt(Point mouse)
+    {
+        var p = ToContent(mouse);
+        for (int i = 0; i < _sliders.Count; i++)
+            if (_sliders[i].Rect.Contains(p)) return i;
+        return -1;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        int hit = SliderAt(e.Location);
+        Cursor = hit >= 0 ? Cursors.Hand : Cursors.Default;
+        if (hit != _hoverSlider) { _hoverSlider = hit; Invalidate(); }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (_hoverSlider != -1) { _hoverSlider = -1; Invalidate(); }
+    }
+
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        base.OnMouseClick(e);
+        if (e.Button != MouseButtons.Left) return;
+        int hit = SliderAt(e.Location);
+        if (hit >= 0)
+            ToggleRequested?.Invoke(this, _sliders[hit].Line);
     }
 
     protected override void Dispose(bool disposing)

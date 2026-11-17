@@ -52,7 +52,35 @@ internal sealed class MainForm : Form
         Controls.Add(statusStrip);
         Theme.DarkScrollBars(_board);
 
+        _board.ToggleRequested += OnToggleRequested;
+
         Shown += async (_, _) => await LoadAllAsync();
+    }
+
+    /// <summary>Flips a setting when its slider is clicked, then rescans the Security tab.</summary>
+    private async void OnToggleRequested(object? sender, ReportLine line)
+    {
+        if (line.Toggle is not { } toggle || line.IsOn is not bool on)
+            return;
+
+        bool target = !on;
+        _status.Text = $"Turning {line.Text} {(target ? "on" : "off")}...";
+        try
+        {
+            await Task.Run(() => toggle.Set(target));
+        }
+        catch (Exception ex)
+        {
+            _status.Text = $"Could not change {line.Text}: {ex.Message}";
+            return;
+        }
+
+        // Re-read so the slider and light reflect what Windows actually stored.
+        _securityLines = await Task.Run(SecurityReport.Scan);
+        _board.SetLines(_securityLines);
+
+        string note = toggle.NeedsReboot ? " Restart the PC for this to take full effect." : "";
+        _status.Text = $"{line.Text} is now {(target ? "on" : "off")}.{note}";
     }
 
     private async Task LoadAllAsync()
@@ -127,7 +155,7 @@ internal sealed class MainForm : Form
         {
             1 => $"{_services.Items.Count} services running",
             2 => $"{_drivers.Items.Count} drivers loaded",
-            _ => "Read-only scan. Nothing on this PC is changed. Red = on, green = off. Right-click to copy as text.",
+            _ => "Red = on, green = off. Sliders change the Windows Settings; the rest is read-only. Right-click to copy.",
         };
     }
 
