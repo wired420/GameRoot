@@ -112,7 +112,7 @@ internal sealed class MainForm : Form
             if (e.Control && e.KeyCode == Keys.C && list.SelectedItems.Count > 0)
             {
                 var lines = list.SelectedItems.Cast<ListViewItem>()
-                    .Select(i => string.Join('\t', i.SubItems.Cast<ListViewItem.ListViewSubItem>().Select(s => s.Text)));
+                    .Select(i => string.Join("\t", i.SubItems.Cast<ListViewItem.ListViewSubItem>().Select(s => s.Text)));
                 Clipboard.SetText(string.Join(Environment.NewLine, lines));
             }
         };

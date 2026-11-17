@@ -47,9 +47,9 @@ internal static class SystemLists
     private static string CleanDriverPath(string path)
     {
         if (path.StartsWith(@"\??\", StringComparison.Ordinal))
-            return path[4..];
+            return path.Substring(4);
         if (path.StartsWith(@"\SystemRoot\", StringComparison.OrdinalIgnoreCase))
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), path[12..]);
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), path.Substring(12));
         return path;
     }
 }

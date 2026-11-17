@@ -27,14 +27,15 @@ can only be read as administrator ("Needs admin to read").
 
 ## Build
 
-Requires the .NET 8 SDK.
+GameRoot targets **.NET Framework 4.8.1**, which comes with Windows 11, so users don't need to install anything.
+Building needs the .NET SDK (any recent version, on Windows or Linux):
 
 ```
-dotnet publish src/GameRoot/GameRoot.csproj -c Release -r win-x64 -o publish
+dotnet build src/GameRoot/GameRoot.csproj -c Release
 ```
 
-This produces a single self-contained `publish/GameRoot.exe` (build it on Windows; the Windows Forms
-SDK is not available in Linux builds of the .NET SDK). Every push also builds the exe in GitHub Actions (download it from the run's artifacts).
+The output is `bin/Release/net481/GameRoot.exe` (about 50 KB) plus `GameRoot.exe.config`, which holds
+high-DPI settings; keep the two together. Every push also builds them in GitHub Actions.
 
 ## Adding a check
 
