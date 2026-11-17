@@ -20,8 +20,8 @@ internal static class SecurityReport
 {
     private static Section[] Sections() =>
     [
-        new(null, new Group(null, [new TpmCheck(), new SecureBootCheck()])),
-        new(null, new Group(null, [new GameModeCheck(), new GpuSchedulingCheck(), new FastStartupCheck()])),
+        new("BIOS Settings", new Group(null, [new TpmCheck(), new SecureBootCheck()])),
+        new("Windows Settings", new Group(null, [new GameModeCheck(), new GpuSchedulingCheck(), new FastStartupCheck()])),
         new("Windows Security",
             new Group("Virus & threat protection", WindowsSecurityChecks.Defender()),
             new Group("Account protection", WindowsSecurityChecks.AccountProtection()),
