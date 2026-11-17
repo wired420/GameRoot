@@ -4,7 +4,7 @@ namespace GameRoot;
 
 internal sealed class MainForm : Form
 {
-    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private readonly TabStrip _tabs = new("Security", "Services", "Drivers");
     private readonly StatusBoard _board = new() { Dock = DockStyle.Fill };
     private readonly ListView _services = NewList(SystemLists.ServiceColumns);
     private readonly ListView _drivers = NewList(SystemLists.DriverColumns);
@@ -15,26 +15,38 @@ internal sealed class MainForm : Form
         Text = "GameRoot - system check (read-only, nothing is changed)";
         Size = new Size(1000, 760);
         StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Theme.Background;
+        ForeColor = Theme.Text;
+        Theme.DarkTitleBar(this);
 
-        var security = new TabPage("Security");
-        security.Controls.Add(_board);
-        var services = new TabPage("Services");
-        services.Controls.Add(_services);
-        var drivers = new TabPage("Drivers");
-        drivers.Controls.Add(_drivers);
-        _tabs.TabPages.AddRange(new[] { security, services, drivers });
-        _tabs.SelectedIndexChanged += (_, _) => UpdateStatus();
+        // One content area; the tab strip shows one page at a time. Security is shown on launch.
+        var content = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Background };
+        Control[] pages = [_board, _services, _drivers];
+        foreach (var page in pages)
+        {
+            page.Visible = page == _board;
+            content.Controls.Add(page);
+        }
+        _tabs.SelectedIndexChanged += (_, _) =>
+        {
+            for (int i = 0; i < pages.Length; i++)
+                pages[i].Visible = i == _tabs.SelectedIndex;
+            UpdateStatus();
+        };
 
         var refresh = new ToolStripButton("Refresh") { Alignment = ToolStripItemAlignment.Right };
         refresh.Click += async (_, _) => await LoadAllAsync();
-        var statusStrip = new StatusStrip();
+        var statusStrip = new StatusStrip { Renderer = new Theme.Renderer(), SizingGrip = false };
+        _status.ForeColor = Theme.Text;
         statusStrip.Items.AddRange(new ToolStripItem[] { _status, refresh });
+        if (_board.ContextMenuStrip is { } menu)
+            menu.Renderer = new Theme.Renderer();
 
+        Controls.Add(content);
         Controls.Add(_tabs);
         Controls.Add(statusStrip);
+        Theme.DarkScrollBars(_board);
 
-        // Security is the tab shown on launch.
-        _tabs.SelectedTab = security;
         Shown += async (_, _) => await LoadAllAsync();
     }
 
@@ -81,8 +93,24 @@ internal sealed class MainForm : Form
             list.Items.Add(new ListViewItem(row.Cells));
         list.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
         foreach (ColumnHeader c in list.Columns)
-            c.Width = Math.Max(c.Width, TextRenderer.MeasureText(c.Text, list.Font).Width + 24);
+            c.Width = Math.Max(c.Width, TextRenderer.MeasureText(c.Text, list.Font).Width + 32);
+        StretchLastColumn(list);
         list.EndUpdate();
+    }
+
+    private static void StretchLastColumn(ListView list)
+    {
+        if (list.Columns.Count == 0) return;
+        var last = list.Columns[list.Columns.Count - 1];
+        int others = 0;
+        for (int i = 0; i < list.Columns.Count - 1; i++)
+            others += list.Columns[i].Width;
+        int remaining = list.ClientSize.Width - others;
+        int content = TextRenderer.MeasureText(last.Text, list.Font).Width + 32;
+        foreach (ListViewItem item in list.Items)
+            if (item.SubItems.Count == list.Columns.Count)
+                content = Math.Max(content, TextRenderer.MeasureText(item.SubItems[list.Columns.Count - 1].Text, list.Font).Width + 16);
+        last.Width = Math.Max(content, remaining);
     }
 
     private static ListView NewList(string[] columns)
@@ -92,11 +120,50 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             View = View.Details,
             FullRowSelect = true,
-            GridLines = true,
             MultiSelect = true,
+            OwnerDraw = true,
+            BorderStyle = BorderStyle.None,
+            BackColor = Theme.Surface,
+            ForeColor = Theme.Text,
+            Font = new Font(Theme.FontFamily, 9.75f),
         };
         foreach (var c in columns)
             list.Columns.Add(c);
+
+        var headerFont = new Font(Theme.FontFamily, 9.75f, FontStyle.Bold);
+        list.DrawColumnHeader += (_, e) =>
+        {
+            using (var fill = Theme.PlateBrush(e.Bounds))
+                e.Graphics.FillRectangle(fill, e.Bounds);
+            using (var edge = new Pen(Theme.Edge))
+            {
+                e.Graphics.DrawLine(edge, e.Bounds.Right - 1, e.Bounds.Top, e.Bounds.Right - 1, e.Bounds.Bottom);
+                e.Graphics.DrawLine(edge, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+            }
+            var text = Rectangle.Inflate(e.Bounds, -6, 0);
+            TextRenderer.DrawText(e.Graphics, e.Header?.Text?.ToUpperInvariant(), headerFont, text, Theme.Accent,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        };
+        list.DrawItem += (_, e) => e.DrawDefault = false;
+        list.DrawSubItem += (_, e) =>
+        {
+            if (e.Item is null) return;
+            bool selected = e.Item.Selected;
+            var back = selected ? Theme.Selection : (e.ItemIndex % 2 == 0 ? Theme.Surface : Theme.SurfaceAlt);
+            using (var b = new SolidBrush(back))
+                e.Graphics.FillRectangle(b, e.Bounds);
+            var text = Rectangle.Inflate(e.Bounds, -6, 0);
+            TextRenderer.DrawText(e.Graphics, e.SubItem?.Text, list.Font, text, selected ? Color.White : Theme.Text,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        };
+
+        // Owner-drawn rows flicker without double buffering, which ListView doesn't expose publicly.
+        typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.SetValue(list, true);
+
+        // Stretch the last column so no unpainted header area is left on the right.
+        list.Resize += (_, _) => StretchLastColumn(list);
+        Theme.DarkScrollBars(list);
 
         // Click a column header to sort; click again to reverse.
         list.ColumnClick += (_, e) =>
