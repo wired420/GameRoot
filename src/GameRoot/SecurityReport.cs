@@ -43,24 +43,17 @@ internal static class SecurityReport
     /// The Windows page that shows a given row, so the app can open it instead of changing the
     /// setting itself. These just launch Windows' own UI; GameRoot never flips these protections.
     /// </summary>
-    private static string? OpenTargetFor(string? groupTitle, string checkName)
+    private static string? GroupOpenTarget(string? groupTitle) => groupTitle switch
     {
-        // TPM has its own management console.
-        if (checkName == "TPM")
-            return "tpm.msc";
-
-        // Each Windows Security group opens straight to its page in the Security app.
-        return groupTitle switch
-        {
-            "Virus & threat protection" => "windowsdefender://threat",
-            "Account protection" => "windowsdefender://account",
-            "Firewall & network protection" => "windowsdefender://network",
-            "App & browser control" => "windowsdefender://appbrowser",
-            "Exploit protection (system settings)" => "windowsdefender://exploitprotection",
-            "Device security" => "windowsdefender://devicesecurity",
-            _ => null,
-        };
-    }
+        // Each Windows Security heading is one page in the Security app, so one button per heading.
+        "Virus & threat protection" => "windowsdefender://threat",
+        "Account protection" => "windowsdefender://account",
+        "Firewall & network protection" => "windowsdefender://network",
+        "App & browser control" => "windowsdefender://appbrowser",
+        "Exploit protection (system settings)" => "windowsdefender://exploitprotection",
+        "Device security" => "windowsdefender://devicesecurity",
+        _ => null,
+    };
 
     /// <summary>Runs every check and returns the report as structured lines for the status board.</summary>
     public static List<ReportLine> Scan()
@@ -77,7 +70,8 @@ internal static class SecurityReport
             {
                 int depth = Depth(section, group);
                 if (group.Title is not null)
-                    lines.Add(new ReportLine(LineKind.GroupTitle, depth - 1, group.Title));
+                    // The heading carries the Open button; one per page.
+                    lines.Add(new ReportLine(LineKind.GroupTitle, depth - 1, group.Title, OpenTarget: GroupOpenTarget(group.Title)));
 
                 foreach (var check in group.Checks)
                 {
@@ -85,8 +79,8 @@ internal static class SecurityReport
                     // A slider appears only when the value is a plain On/Off we can actually set.
                     var toggle = check as IToggle;
                     bool settable = toggle is not null && value is "On" or "Off";
-                    // Read-only rows instead get a button that opens the matching Windows page.
-                    string? open = settable ? null : OpenTargetFor(group.Title, check.Name);
+                    // TPM is the one read-only row with its own console, so it keeps a row button.
+                    string? open = check.Name == "TPM" ? "tpm.msc" : null;
                     lines.Add(new ReportLine(LineKind.Check, depth, check.Name, value, settable ? toggle : null, open));
                 }
             }

@@ -74,9 +74,11 @@ internal sealed class StatusBoard : Panel
 
     // ---- Structure rebuilt from the flat report lines ----
 
-    private sealed class BoardGroup(string? title)
+    private sealed class BoardGroup(ReportLine? heading)
     {
-        public string? Title { get; } = title;
+        /// <summary>The heading line, or null for a section without group headings.</summary>
+        public ReportLine? Heading { get; } = heading;
+        public string? Title => Heading?.Text;
         public List<ReportLine> Checks { get; } = [];
     }
 
@@ -106,7 +108,7 @@ internal sealed class StatusBoard : Panel
                     break;
                 case LineKind.GroupTitle:
                     if (section is null) { section = new BoardSection(null); result.Add(section); }
-                    group = new BoardGroup(l.Text);
+                    group = new BoardGroup(l);
                     section.Groups.Add(group);
                     break;
                 case LineKind.Check:
@@ -137,13 +139,14 @@ internal sealed class StatusBoard : Panel
     private int SliderWidth => S(34);
     private int SliderHeight => S(16);
 
-    /// <summary>True when any row has a control, so every row reserves a slot to keep labels aligned.</summary>
-    private bool HasControls => _lines.Any(l => l.Toggle is not null || l.OpenTarget is not null);
-
     private int OpenButtonWidth => S(46);
 
-    /// <summary>Left slot reserved for a slider or Open button on every check row.</summary>
-    private int SliderSlot => HasControls ? Math.Max(SliderWidth, OpenButtonWidth) + S(10) : 0;
+    /// <summary>Left slot for a slider or row button, wide enough for either.</summary>
+    private int ControlSlot => Math.Max(SliderWidth, OpenButtonWidth) + S(10);
+
+    /// <summary>True when any check row in the section has its own slider or button.</summary>
+    private static bool NeedsSlot(BoardSection section) =>
+        section.Groups.Any(gr => gr.Checks.Any(c => c.Toggle is not null || c.OpenTarget is not null));
 
     /// <summary>Width reserved right of each label for the light and its value text.</summary>
     private int ValueColumn()
@@ -159,7 +162,7 @@ internal sealed class StatusBoard : Panel
         int label = 0;
         foreach (var l in _lines.Where(l => l.Kind == LineKind.Check))
             label = Math.Max(label, TextRenderer.MeasureText(l.Text, _labelFont).Width);
-        return S(16) + SliderSlot + label + S(24) + ValueColumn();
+        return S(16) + ControlSlot + label + S(24) + ValueColumn();
     }
 
     private int MinWidth() => EdgeMargin * 2 + Gutter + MinColumnWidth() * 2;
@@ -213,8 +216,8 @@ internal sealed class StatusBoard : Panel
             if (section.IsSimple)
             {
                 var right = i + 1 < _sections.Count && _sections[i + 1].IsSimple ? _sections[++i] : null;
-                int hL = SimpleCard(g, section, xL, y, colW, valueCol);
-                int hR = right is null ? 0 : SimpleCard(g, right, xR, y, colW, valueCol);
+                int hL = SimpleCard(g, section, xL, y, colW, valueCol, NeedsSlot(section) ? ControlSlot : 0);
+                int hR = right is null ? 0 : SimpleCard(g, right, xR, y, colW, valueCol, NeedsSlot(right) ? ControlSlot : 0);
                 y += Math.Max(hL, hR);
             }
             else
@@ -225,9 +228,10 @@ internal sealed class StatusBoard : Panel
                         DrawPlate(g, new Rectangle(m, y, width - m * 2, PlateHeight), section.Title.ToUpperInvariant(), _headerFont);
                     y += PlateHeight + S(4);
                 }
+                int slot = NeedsSlot(section) ? ControlSlot : 0;
                 var (left, rightGroups) = SplitGroups(section.Groups);
-                int yl = GroupColumn(g, left, xL, y, colW, valueCol);
-                int yr = GroupColumn(g, rightGroups, xR, y, colW, valueCol);
+                int yl = GroupColumn(g, left, xL, y, colW, valueCol, slot);
+                int yr = GroupColumn(g, rightGroups, xR, y, colW, valueCol, slot);
                 y = Math.Max(yl, yr);
             }
 
@@ -240,7 +244,7 @@ internal sealed class StatusBoard : Panel
         return y + m;
     }
 
-    private int SimpleCard(Graphics? g, BoardSection section, int x, int y, int w, int valueCol)
+    private int SimpleCard(Graphics? g, BoardSection section, int x, int y, int w, int valueCol, int slot)
     {
         int top = y;
         if (section.Title is not null)
@@ -251,13 +255,13 @@ internal sealed class StatusBoard : Panel
         }
         foreach (var check in section.Groups.SelectMany(gr => gr.Checks))
         {
-            if (g is not null) DrawCheck(g, check, x + S(16), x + w, y, valueCol);
+            if (g is not null) DrawCheck(g, check, x + S(16), x + w, y, valueCol, slot);
             y += RowHeight;
         }
         return y - top;
     }
 
-    private int GroupColumn(Graphics? g, List<BoardGroup> groups, int x, int y, int w, int valueCol)
+    private int GroupColumn(Graphics? g, List<BoardGroup> groups, int x, int y, int w, int valueCol, int slot)
     {
         foreach (var group in groups)
         {
@@ -268,12 +272,21 @@ internal sealed class StatusBoard : Panel
                     DrawText(g, group.Title.ToUpperInvariant(), _groupFont, Hazard, x + S(8), y + S(6), GroupHeight - S(6));
                     using var pen = new Pen(Color.FromArgb(90, Hazard), 1);
                     g.DrawLine(pen, x + S(8), y + GroupHeight - S(3), x + w - S(4), y + GroupHeight - S(3));
+
+                    // One Open button per heading, right-aligned, since each heading is one Windows page.
+                    if (group.Heading is { OpenTarget: not null } heading)
+                    {
+                        var btn = new Rectangle(x + w - OpenButtonWidth - S(4), y + (GroupHeight - SliderHeight) / 2 - S(1),
+                            OpenButtonWidth, SliderHeight);
+                        DrawOpenButton(g, btn, _openButtons.Count == _hoverOpen);
+                        _openButtons.Add((btn, heading));
+                    }
                 }
                 y += GroupHeight;
             }
             foreach (var check in group.Checks)
             {
-                if (g is not null) DrawCheck(g, check, x + S(16), x + w, y, valueCol);
+                if (g is not null) DrawCheck(g, check, x + S(16), x + w, y, valueCol, slot);
                 y += RowHeight;
             }
             y += S(4);
@@ -312,13 +325,13 @@ internal sealed class StatusBoard : Panel
     /// <summary>Width needed to show the whole board without scrolling.</summary>
     public int ContentWidth => _lines.Count == 0 ? 0 : MinWidth();
 
-    private void DrawCheck(Graphics g, ReportLine check, int x, int right, int y, int valueCol)
+    private void DrawCheck(Graphics g, ReportLine check, int x, int right, int y, int valueCol, int slot)
     {
         int h = RowHeight;
         int lightX = right - valueCol;
 
-        // A slider sits at the start of the line for settings the app can change; read-only rows
-        // with a Windows page instead get an "Open" button in the same slot.
+        // A slider sits at the start of the line for settings the app can change; a read-only row
+        // with its own Windows page (TPM) instead gets an "Open" button in the same slot.
         if (check.Toggle is not null && check.IsOn is bool on)
         {
             var slider = new Rectangle(x, y + (h - SliderHeight) / 2, SliderWidth, SliderHeight);
@@ -331,7 +344,7 @@ internal sealed class StatusBoard : Panel
             DrawOpenButton(g, btn, _openButtons.Count == _hoverOpen);
             _openButtons.Add((btn, check));
         }
-        int labelX = x + SliderSlot;
+        int labelX = x + slot;
         DrawText(g, check.Text, _labelFont, LabelColor, labelX, y, h);
 
         int textW = TextRenderer.MeasureText(check.Text, _labelFont).Width;

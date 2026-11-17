@@ -11,8 +11,9 @@ saves all three tabs to a text file.
 
 GameRoot runs as administrator (it prompts via UAC on launch). The scan is read-only, with one exception:
 the **Windows Settings** (Game Mode, GPU scheduling, Fast Boot) have a slider at the start of their row to
-turn them on or off. The Windows Security protections and BIOS items are never changed by the app; instead
-each shows an **Open** button that jumps straight to its page in Windows, so the setting can be changed there.
+turn them on or off. The Windows Security protections and BIOS items are never changed by the app; instead each Windows Security
+heading has one **Open** button (each heading is a single page) that jumps straight to it in Windows, and
+TPM has an Open button to its management console. The setting is changed there, in Windows' own UI.
 
 ## What it checks
 
