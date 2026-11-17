@@ -162,7 +162,14 @@ internal sealed class StatusBoard : Panel
         int label = 0;
         foreach (var l in _lines.Where(l => l.Kind == LineKind.Check))
             label = Math.Max(label, TextRenderer.MeasureText(l.Text, _labelFont).Width);
-        return S(16) + ControlSlot + label + S(24) + ValueColumn();
+        int rows = S(16) + ControlSlot + label + S(24) + ValueColumn();
+
+        // A heading with an Open button after it must also fit in the column.
+        int heads = 0;
+        foreach (var l in _lines.Where(l => l.Kind == LineKind.GroupTitle && l.OpenTarget is not null))
+            heads = Math.Max(heads, S(8) + TextRenderer.MeasureText(l.Text.ToUpperInvariant(), _groupFont).Width
+                + S(10) + OpenButtonWidth + S(8));
+        return Math.Max(rows, heads);
     }
 
     private int MinWidth() => EdgeMargin * 2 + Gutter + MinColumnWidth() * 2;
@@ -273,10 +280,11 @@ internal sealed class StatusBoard : Panel
                     using var pen = new Pen(Color.FromArgb(90, Hazard), 1);
                     g.DrawLine(pen, x + S(8), y + GroupHeight - S(3), x + w - S(4), y + GroupHeight - S(3));
 
-                    // One Open button per heading, right-aligned, since each heading is one Windows page.
+                    // One Open button per heading, sitting just after the heading text.
                     if (group.Heading is { OpenTarget: not null } heading)
                     {
-                        var btn = new Rectangle(x + w - OpenButtonWidth - S(4), y + (GroupHeight - SliderHeight) / 2 - S(1),
+                        int titleW = TextRenderer.MeasureText(group.Title.ToUpperInvariant(), _groupFont).Width;
+                        var btn = new Rectangle(x + S(8) + titleW + S(10), y + (GroupHeight - SliderHeight) / 2 - S(1),
                             OpenButtonWidth, SliderHeight);
                         DrawOpenButton(g, btn, _openButtons.Count == _hoverOpen);
                         _openButtons.Add((btn, heading));
