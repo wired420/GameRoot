@@ -17,6 +17,10 @@ internal sealed class MainForm : Form
 
     private readonly ScanData? _initial;
 
+    // Set when a Windows page is opened; the Security tab is rechecked when GameRoot regains focus.
+    private bool _recheckOnActivate;
+    private bool _rechecking;
+
     /// <summary>Opens with results already scanned by the splash screen.</summary>
     public MainForm(ScanData initial) : this() => _initial = initial;
 
@@ -76,6 +80,7 @@ internal sealed class MainForm : Form
 
         _board.ToggleRequested += OnToggleRequested;
         _board.OpenRequested += OnOpenRequested;
+        Activated += async (_, _) => await RecheckAfterReturnAsync();
 
         Shown += async (_, _) =>
         {
@@ -90,11 +95,39 @@ internal sealed class MainForm : Form
         try
         {
             Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
-            _status.Text = "Opened the Windows settings page. Change it there if you want to.";
+            _recheckOnActivate = true;
+            _status.Text = "Opened the Windows settings page. GameRoot rechecks when you come back.";
         }
         catch (Exception ex)
         {
             _status.Text = $"Could not open that page: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// After the user opened a Windows page and comes back to GameRoot, re-reads the Security tab
+    /// so it shows anything they changed there.
+    /// </summary>
+    private async Task RecheckAfterReturnAsync()
+    {
+        if (!_recheckOnActivate || _rechecking)
+            return;
+        _recheckOnActivate = false;
+        _rechecking = true;
+        _status.Text = "Rechecking settings...";
+        try
+        {
+            _securityLines = await Task.Run(() => SecurityReport.Scan());
+            _board.SetLines(_securityLines);
+            _status.Text = $"Settings rechecked at {DateTime.Now:h:mm tt}.";
+        }
+        catch (Exception ex)
+        {
+            _status.Text = $"Could not recheck settings: {ex.Message}";
+        }
+        finally
+        {
+            _rechecking = false;
         }
     }
 
