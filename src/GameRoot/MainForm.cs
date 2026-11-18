@@ -46,11 +46,25 @@ internal sealed class MainForm : Form
         };
 
         var refresh = new ToolStripButton("Refresh") { Alignment = ToolStripItemAlignment.Right };
+        var barFont = new Font(Theme.FontFamily, 11f, FontStyle.Regular);
+        var buttonFont = new Font(Theme.FontFamily, 11f, FontStyle.Bold);
         refresh.Click += async (_, _) => await LoadAllAsync();
-        var statusStrip = new StatusStrip { Renderer = new Theme.Renderer(), SizingGrip = false };
+        var statusStrip = new StatusStrip
+        {
+            Renderer = new Theme.Renderer(),
+            SizingGrip = false,
+            Font = barFont,
+            Padding = new Padding(10, 6, 10, 6),
+        };
         _status.ForeColor = Theme.Text;
         var export = new ToolStripButton("Export report...") { Alignment = ToolStripItemAlignment.Right };
         export.Click += (_, _) => ExportReport();
+        foreach (var button in new[] { refresh, export })
+        {
+            button.Font = buttonFont;
+            button.Padding = new Padding(14, 5, 14, 5);
+            button.Margin = new Padding(6, 0, 0, 0);
+        }
         statusStrip.Items.AddRange(new ToolStripItem[] { _status, refresh, export });
         if (_board.ContextMenuStrip is { } menu)
             menu.Renderer = new Theme.Renderer();
