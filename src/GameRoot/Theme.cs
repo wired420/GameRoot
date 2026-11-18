@@ -69,6 +69,24 @@ internal static class Theme
             e.TextColor = e.Item.Selected ? Color.White : Text;
             base.OnRenderItemText(e);
         }
+
+        /// <summary>Status bar buttons always look like steel buttons, not just on hover.</summary>
+        protected override void OnRenderButtonBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (e.Item.Owner is not StatusStrip)
+            {
+                base.OnRenderButtonBackground(e);
+                return;
+            }
+            var r = new Rectangle(0, 0, e.Item.Width - 1, e.Item.Height - 1);
+            bool hot = e.Item.Selected || e.Item.Pressed;
+            using (var fill = new LinearGradientBrush(r,
+                hot ? Color.FromArgb(92, 97, 104) : PlateTop,
+                e.Item.Pressed ? PlateTop : PlateBottom, LinearGradientMode.Vertical))
+                e.Graphics.FillRectangle(fill, r);
+            using var edge = new Pen(hot ? Accent : Edge);
+            e.Graphics.DrawRectangle(edge, r);
+        }
     }
 
     private sealed class Colors : ProfessionalColorTable
