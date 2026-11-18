@@ -207,7 +207,7 @@ internal sealed class MainForm : Form
         {
             Title = "Export GameRoot report",
             Filter = "Text file (*.txt)|*.txt",
-            FileName = $"GameRoot-report-{Environment.MachineName}-{DateTime.Now:yyyy-MM-dd-HHmm}.txt",
+            FileName = $"GameRoot-report-{DateTime.Now:yyyy-MM-dd-HHmm}.txt",
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         };
         if (dialog.ShowDialog(this) != DialogResult.OK)
