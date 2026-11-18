@@ -87,9 +87,7 @@ internal static class SecurityReport
                     // A slider appears only when the value is a plain On/Off we can actually set.
                     var toggle = check as IToggle;
                     bool settable = toggle is not null && value is "On" or "Off";
-                    // TPM is the one read-only row with its own console, so it keeps a row button.
-                    string? open = check.Name == "TPM" ? "tpm.msc" : null;
-                    lines.Add(new ReportLine(LineKind.Check, depth, check.Name, value, settable ? toggle : null, open));
+                    lines.Add(new ReportLine(LineKind.Check, depth, check.Name, value, settable ? toggle : null));
                 }
             }
 
