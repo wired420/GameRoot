@@ -8,6 +8,8 @@ namespace GameRoot;
 /// </summary>
 internal sealed class SplashForm : Form
 {
+    private const int CountdownSeconds = 5;
+
     private double _fraction;
     private string _status = "Starting...";
     private readonly Font _titleFont = new(Theme.FontFamily, 22f, FontStyle.Bold);
@@ -51,6 +53,17 @@ internal sealed class SplashForm : Form
         catch (Exception ex)
         {
             Error = ex.Message;
+            Close();
+            return;
+        }
+
+        // Hold for a visible countdown so a fast scan doesn't look like a window flashing past.
+        _fraction = 1;
+        for (int i = CountdownSeconds; i > 0; i--)
+        {
+            _status = $"Scan complete. Opening GameRoot in {i}...";
+            Invalidate();
+            await Task.Delay(1000);
         }
         Close();
     }
