@@ -51,3 +51,7 @@ requests administrator rights, so debugging from Visual Studio needs VS run as a
 Implement `ICheck` in `src/GameRoot/Checks/` and add it to a section in `SecurityReport.cs`. Each section is
 followed by a separator line. To let a setting be changed as well as read, also implement `IToggle`; a slider
 then appears on its row. This is reserved for non-security settings.
+
+## License
+
+Released into the public domain under the [Unlicense](LICENSE). Use it however you like; it comes with no warranty.
