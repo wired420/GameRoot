@@ -5,7 +5,8 @@ namespace GameRoot;
 
 internal sealed class MainForm : Form
 {
-    private readonly TabStrip _tabs = new("Security", "Services", "Drivers");
+    private readonly TabStrip _tabs = new("Security", "Services", "Drivers", "About");
+    private readonly AboutPanel _about = new();
     private readonly StatusBoard _board = new() { Dock = DockStyle.Fill };
     private readonly ListView _services = NewList(SystemLists.ServiceColumns);
     private readonly ListView _drivers = NewList(SystemLists.DriverColumns);
@@ -30,7 +31,7 @@ internal sealed class MainForm : Form
 
         // One content area; the tab strip shows one page at a time. Security is shown on launch.
         var content = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Background };
-        Control[] pages = [_board, _services, _drivers];
+        Control[] pages = [_board, _services, _drivers, _about];
         foreach (var page in pages)
         {
             page.Visible = page == _board;
@@ -181,6 +182,7 @@ internal sealed class MainForm : Form
         {
             1 => $"{_services.Items.Count} services running",
             2 => $"{_drivers.Items.Count} drivers loaded",
+            3 => AboutPanel.RepoUrl,
             _ => "Red = on, green = off. Sliders change a setting; Open jumps to its Windows page. Right-click to copy.",
         };
     }

@@ -5,6 +5,7 @@ A Windows app that scans PC settings and reports each one as **On** or **Off**. 
 - **Security** (opens on launch): the settings report below.
 - **Services**: every running Windows service.
 - **Drivers**: every loaded driver.
+- **About**: the logo, version and a link to this repository.
 
 Click a column header to sort, and Ctrl+C copies selected rows. **Export report...** in the bottom bar
 saves all three tabs to a text file.
