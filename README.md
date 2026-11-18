@@ -13,8 +13,8 @@ GameRoot runs as administrator (it prompts via UAC on launch). After a warning p
 GameRoot logo and a progress bar runs the scan; the main window opens with the results when it finishes. The scan is read-only, with one exception:
 the **Windows Settings** (Game Mode, GPU scheduling, Fast Boot) have a slider at the start of their row to
 turn them on or off. The Windows Security protections and BIOS items are never changed by the app; instead each Windows Security
-heading has one **Open** button (each heading is a single page) that jumps straight to it in Windows, and
-TPM has an Open button to its management console. The setting is changed there, in Windows' own UI.
+heading has one **Open** button (each heading is a single page) that jumps straight to it in Windows;
+the setting is changed there, in Windows' own UI. TPM and Secure Boot are firmware settings changed in the BIOS.
 
 ## What it checks
 
