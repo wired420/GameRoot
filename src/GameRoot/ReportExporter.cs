@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace GameRoot;
@@ -44,17 +45,63 @@ internal static class ReportExporter
             return;
         }
 
+        // Strip anything that identifies the person or PC before it goes in the file.
+        var rows = data.Rows.Select(r => r.Cells.Select((c, i) => Mask(c, i < columns.Length ? columns[i] : "")).ToArray()).ToList();
+
         // Pad every column but the last so the table lines up in a monospace font.
         var widths = columns.Select((c, i) =>
-            Math.Max(c.Length, data.Rows.Select(r => i < r.Cells.Length ? r.Cells[i].Length : 0).DefaultIfEmpty(0).Max())).ToArray();
+            Math.Max(c.Length, rows.Select(r => i < r.Length ? r[i].Length : 0).DefaultIfEmpty(0).Max())).ToArray();
 
         string Line(IReadOnlyList<string> cells) => string.Join("  ",
             cells.Select((c, i) => i == cells.Count - 1 ? c : c.PadRight(widths[i]))).TrimEnd();
 
         sb.AppendLine(Line(columns));
         sb.AppendLine(Line(widths.Select(w => new string('-', w)).ToArray()));
-        foreach (var row in data.Rows)
-            sb.AppendLine(Line(row.Cells));
+        foreach (var row in rows)
+            sb.AppendLine(Line(row));
+    }
+
+    // Service accounts built into Windows; these are the same on every PC, so they stay as-is.
+    private static readonly string[] BuiltInAccountPrefixes =
+        ["LocalSystem", "LocalService", "NetworkService", @"NT AUTHORITY\", @"NT SERVICE\"];
+
+    // C:\Users\<name>\... -> C:\Users\<user>\..., leaving Windows' own profile folders alone.
+    private static readonly Regex UserProfilePath = new(
+        @"(?i)(?<prefix>[A-Z]:\\Users\\)(?!(Public|Default|Default User|All Users)(\\|$|""))(?<name>[^\\""]+)",
+        RegexOptions.Compiled);
+
+    // \\server\share -> \\<server>\share
+    private static readonly Regex UncServer = new(@"(?<![A-Za-z0-9])\\\\(?<server>[^\\\s""]+)", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Hides anything that identifies the person or PC in one table cell: non-built-in service
+    /// accounts, user profile folders, network server names, and the user, computer and domain names.
+    /// </summary>
+    internal static string Mask(string cell, string column)
+    {
+        if (string.IsNullOrEmpty(cell))
+            return cell;
+
+        if (column == "Account")
+        {
+            bool builtIn = BuiltInAccountPrefixes.Any(a => cell.StartsWith(a, StringComparison.OrdinalIgnoreCase));
+            return builtIn ? cell : "<account hidden>";
+        }
+
+        string result = UserProfilePath.Replace(cell, m => m.Groups["prefix"].Value + "<user>");
+        result = UncServer.Replace(result, @"\\<server>");
+        result = ReplaceWord(result, Environment.UserName, "<user>");
+        result = ReplaceWord(result, Environment.MachineName, "<computer>");
+        if (!string.Equals(Environment.UserDomainName, Environment.MachineName, StringComparison.OrdinalIgnoreCase))
+            result = ReplaceWord(result, Environment.UserDomainName, "<domain>");
+        return result;
+    }
+
+    private static string ReplaceWord(string text, string? word, string replacement)
+    {
+        if (string.IsNullOrWhiteSpace(word) || word!.Length < 3)
+            return text;
+        return Regex.Replace(text, $@"(?i)(?<![A-Za-z0-9]){Regex.Escape(word)}(?![A-Za-z0-9])", replacement);
     }
 
     /// <summary>
