@@ -16,7 +16,7 @@ internal static class ReportExporter
 
         sb.AppendLine("GameRoot system report");
         sb.AppendLine(rule);
-        sb.AppendLine($"Computer : {Environment.MachineName}");
+        sb.AppendLine($"Computer : {AnonymousComputerName()}");
         sb.AppendLine($"Windows  : {WindowsVersion()}");
         sb.AppendLine($"Created  : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine("This report was made by a read-only scan. Nothing on the PC was changed.");
@@ -55,6 +55,26 @@ internal static class ReportExporter
         sb.AppendLine(Line(widths.Select(w => new string('-', w)).ToArray()));
         foreach (var row in data.Rows)
             sb.AppendLine(Line(row.Cells));
+    }
+
+    /// <summary>
+    /// The computer's name is never written to the report. Domain-joined PCs say so; everything
+    /// else shows the generic DESKTOP-XXXXXX placeholder.
+    /// </summary>
+    private static string AnonymousComputerName()
+    {
+        bool onDomain = false;
+        try
+        {
+            using var searcher = new System.Management.ManagementObjectSearcher("SELECT PartOfDomain FROM Win32_ComputerSystem");
+            foreach (System.Management.ManagementBaseObject cs in searcher.Get())
+                onDomain = cs["PartOfDomain"] is true;
+        }
+        catch
+        {
+            // If it can't be read, fall back to the generic placeholder.
+        }
+        return onDomain ? "On a domain (name hidden)" : "DESKTOP-XXXXXX (name hidden)";
     }
 
     private static string WindowsVersion()
