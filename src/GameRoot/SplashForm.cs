@@ -29,6 +29,7 @@ internal sealed class SplashForm : Form
         BackColor = Theme.Background;
         DoubleBuffered = true;
         ClientSize = new Size(S(480), S(300));
+        if (Theme.AppIcon is { } icon) Icon = icon;
     }
 
     private int S(float v) => (int)Math.Round(v * DeviceDpi / 96f);

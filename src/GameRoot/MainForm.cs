@@ -28,6 +28,7 @@ internal sealed class MainForm : Form
         BackColor = Theme.Background;
         ForeColor = Theme.Text;
         Theme.DarkTitleBar(this);
+        if (Theme.AppIcon is { } icon) Icon = icon;
 
         // One content area; the tab strip shows one page at a time. Security is shown on launch.
         var content = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Background };

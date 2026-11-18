@@ -17,6 +17,15 @@ internal static class Theme
     public static readonly Color Accent = Color.FromArgb(232, 178, 30);
     public static readonly Color Selection = Color.FromArgb(78, 64, 22);
 
+    /// <summary>The shield icon embedded in the exe, for window title bars and the taskbar.</summary>
+    public static Icon? AppIcon { get; } = LoadIcon();
+
+    private static Icon? LoadIcon()
+    {
+        try { return Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+        catch { return null; }
+    }
+
     public static string FontFamily { get; } = FontExists("Bahnschrift") ? "Bahnschrift" : "Segoe UI";
 
     public static LinearGradientBrush PlateBrush(Rectangle r) =>
